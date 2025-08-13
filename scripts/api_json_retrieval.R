@@ -12,11 +12,19 @@ parameters <- c("docsjson/HANSARD?queries%5Btype%5D=HANSARD", "&sorts%5Bdate%5D=
 # building the request
 url <- str_c(c(base_url, parameters), collapse = "")
 page_num = 1
-per_page = 3700
+per_page = 10
 offset_num = 0
 
 req_object <- request(glue(url)) 
 
+# check how many objects there are to retrieve
+per_page = req_object %>% 
+  req_perform() %>% 
+  resp_body_string() %>% 
+  from_json() %>% 
+  .$queryRecordCount
+
+req_object <- request(glue(url)) 
 
 
 # check if it looks correct
@@ -46,6 +54,10 @@ hansard_meta <- response %>%
     date = ymd(gsub("[^0-9]", "", date)),
     # some say "Joint" others "JOINT", standardise
     house = gsub("Joint", "JOINT", house),
+    # NA causes issues 
+    house = gsub("NA", "NATIONAL ASSEMBLY", house),
+    # set to NA if language is missing
+    language = na_if(x = language, ""),
     # add the base of the url to the file location for later download
     file_location = str_c("https://www.parliament.gov.za/storage/app/media/Docs/", file_location, sep = "")
   ) %>% 
@@ -62,6 +74,14 @@ hansard_meta %>%
   facet_wrap(~house) +
   theme_classic()
 
+# check against what has already been scraped
+read_delim("output/hansard_meta.csv", "|") %>%
+  anti_join(hansard_meta)
+
 # save the data retrieved 
 hansard_meta %>% 
-  saveRDS("output/hansard_meta.rds")
+  write_delim(
+    "output/hansard_meta.csv", 
+    delim = "|",
+    append = T
+  )
